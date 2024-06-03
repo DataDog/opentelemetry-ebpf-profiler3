@@ -309,7 +309,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		baseName = "<anonymous-blob>"
 	}
 
-	gnuBuildID, _ := ef.GetBuildID()
+	buildID, _ := ef.GetBuildID()
+	if buildID == "" {
+		// If the buildID is empty, try to get Go buildID.
+		buildID, _ = ef.GetGoBuildID()
+	}
+
 	mapping2 := *mapping // copy to avoid races if callee saves the closure
 	open := func() (process.ReadAtCloser, error) {
 		return pr.OpenMappingFile(&mapping2)
@@ -317,11 +322,12 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	pm.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
 		FileID:            fileID,
 		FileName:          baseName,
-		GnuBuildID:        gnuBuildID,
+		GnuBuildID:        buildID,
 		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
 		Interp:            libpf.Native,
 		Open:              open,
 	})
+
 	return info
 }
 
