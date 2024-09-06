@@ -60,6 +60,16 @@ func TestGetGoBuildID(t *testing.T) {
 	}
 }
 
+func TestGetGoBuildIDError(t *testing.T) {
+	elfFile := getELF("testdata/go-buildid-bazel", t)
+	defer elfFile.Close()
+
+	buildID, err := pfelf.GetGoBuildID(elfFile)
+	if assert.ErrorIs(t, pfelf.ErrNoBuildID, err) {
+		assert.Equal(t, "", buildID)
+	}
+}
+
 func TestGetDebugLink(t *testing.T) {
 	debugExePath, err := testsupport.WriteTestExecutable1()
 	require.NoError(t, err)
