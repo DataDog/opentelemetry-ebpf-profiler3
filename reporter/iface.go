@@ -50,8 +50,6 @@ type TraceReporter interface {
 	SupportsReportTraceEvent() bool
 }
 
-type ExecutableOpener = func() (process.ReadAtCloser, error)
-
 type SymbolReporter interface {
 	// ReportFallbackSymbol enqueues a fallback symbol for reporting, for a given frame.
 	ReportFallbackSymbol(frameID libpf.FrameID, symbol string)
@@ -63,8 +61,8 @@ type SymbolReporter interface {
 	// that don't support this may pass a `nil` function pointer. Implementations that
 	// wish to upload executables should NOT block this function to do so and instead just
 	// open the file and then enqueue the upload in the background.
-	ExecutableMetadata(fileID libpf.FileID, fileName, gnuBuildID string,
-		interp libpf.InterpreterType, open ExecutableOpener)
+	ExecutableMetadata(fileID libpf.FileID, fileName, buildID string,
+		interp libpf.InterpreterType, opener process.FileOpener)
 
 	// FrameMetadata accepts metadata associated with a frame and caches this information before
 	// a periodic reporting to the backend.
