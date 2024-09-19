@@ -15,7 +15,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"syscall"
 	"time"
 
@@ -300,32 +299,19 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 		return info
 	}
 
-	baseName := path.Base(mapping.Path)
-	if baseName == "/" {
-		// There are circumstances where there is no filename.
-		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
-		// fork_usermode_blob() and launches process with a blob without
-		// filename mapped in as the executable.
-		baseName = "<anonymous-blob>"
-	}
-
 	buildID, _ := ef.GetBuildID()
 	if buildID == "" {
 		// If the buildID is empty, try to get Go buildID.
 		buildID, _ = ef.GetGoBuildID()
 	}
 
-	mapping2 := *mapping // copy to avoid races if callee saves the closure
-	open := func() (process.ReadAtCloser, error) {
-		return pr.OpenMappingFile(&mapping2)
-	}
 	pm.reporter.ExecutableMetadata(&reporter.ExecutableMetadataArgs{
 		FileID:            fileID,
-		FileName:          baseName,
+		FileName:          mapping.Path,
 		GnuBuildID:        buildID,
 		DebuglinkFileName: ef.DebuglinkFileName(elfRef.FileName(), elfRef),
 		Interp:            libpf.Native,
-		Open:              open,
+		Open:              pr,
 	})
 
 	return info
