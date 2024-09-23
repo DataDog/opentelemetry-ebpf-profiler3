@@ -1,0 +1,79 @@
+name: Rebase on upstream
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check PR
+        id: check_pr
+        run: |
+          # Check that ${{ github.ref_name }} has main as ancestor (ie. fast forward merge is possible)
+          if ! git merge-base --is-ancestor origin/main ${{ github.ref_name }}; then
+            echo "${{ github.ref_name }} does not have main as ancestor"
+            exit 1
+          fi
+
+          gh pr list --state open --head ${{ github.ref_name }} --base main --json number,reviewDecision,state,isDraft,mergeable,statusCheckRollup > pr.json
+          # Check that there is a single PR with main as base branch and ${{ github.ref_name }} as head branch
+          if [[ "$(jq length pr.json)" -eq 0 ]]; then
+            echo "No PR with main as base branch and ${{ github.ref_name }} as head branch"
+            exit 1
+          fi
+          # No need to check that PR count is greater than 1, because github prevents creating multiple PRs with the same head and base branches
+
+          # Check that PR is not draft
+          if [[ "$(jq '.[0] | .isDraft' pr.json)" == "true" ]]; then
+            echo "PR is a draft"
+            exit 1
+          fi
+
+          # Check that PR is mergeable
+          if [[ "$(jq '.[0] | .mergeable' pr.json)" == "false" ]]; then
+            echo "PR is not mergeable"
+            exit 1
+          fi
+
+          # Check that PR is approved
+          if [[ "$(jq -r '.[0] | .reviewDecision' pr.json)" != "APPROVED" ]]; then
+            echo "PR is not approved"
+            exit 1
+          fi
+
+          # Check that PR build is successful, sdm policy check is a bit different from the others
+          unsuccessful_check_count=$(jq '[.[0] | .statusCheckRollup | .[] | select(.workflowName != null and (.status != "COMPLETED" or .conclusion != "SUCCESS") or (.context != null and .state != "SUCCESS"))] | length' pr.json)
+          if [[ "$unsuccessful_check_count" -gt 0 ]]; then
+            echo "PR build is not successful"
+            exit 1
+          fi
+
+          echo "pr_number=$(jq '.[0] | .number' pr.json)" >> "$GITHUB_OUTPUT"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Rewrite datadog branch
+        run: |
+          git checkout datadog
+          git reset --hard ${{ github.ref_name }}
+          git push -f
+
+      - name: Close PR and delete update branch
+        run: |
+          gh pr close -d ${{ steps.check_pr.outputs.pr_number }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
