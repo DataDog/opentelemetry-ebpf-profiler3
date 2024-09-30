@@ -32,6 +32,32 @@ type systemProcess struct {
 	fileToMapping map[string]*Mapping
 }
 
+type ReadAtCloserOnly interface {
+	io.ReaderAt
+	io.Closer
+}
+
+type FileWithPath struct {
+	ReadAtCloserOnly
+	path string
+}
+
+func (f *FileWithPath) Path() string {
+	return f.path
+}
+
+func NewFileWithPath(reader ReadAtCloserOnly, path string) *FileWithPath {
+	return &FileWithPath{reader, path}
+}
+
+func Open(path string) (*FileWithPath, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewFileWithPath(file, path), nil
+}
+
 var _ Process = &systemProcess{}
 
 // New returns an object with Process interface accessing it
@@ -196,7 +222,7 @@ func (sp *systemProcess) OpenMappingFile(m *Mapping) (ReadAtCloser, error) {
 	if filename == "" {
 		return nil, errors.New("no backing file for anonymous memory")
 	}
-	return os.Open(filename)
+	return Open(filename)
 }
 
 func (sp *systemProcess) GetMappingFileLastModified(m *Mapping) int64 {
@@ -248,37 +274,4 @@ func (sp *systemProcess) OpenELF(file string) (*pfelf.File, error) {
 
 	// Fall back to opening the file using the process specific root
 	return pfelf.Open(fmt.Sprintf("/proc/%v/root/%s", sp.pid, file))
-}
-
-type ReaderWithDummyClose struct {
-	io.ReaderAt
-}
-
-func (r *ReaderWithDummyClose) Close() error {
-	return nil
-}
-
-func (sp *systemProcess) Open(file string) (ReadAtCloser, string, error) {
-	// Always open via map_files as it can open deleted files if available.
-	// No fallback is attempted:
-	// - if the process exited, the fallback will error also (/proc/>PID> is gone)
-	// - if the error is due to ELF content, same error will occur in both cases
-	// - if the process unmapped the ELF, its data is no longer needed
-	if m, ok := sp.fileToMapping[file]; ok {
-		if m.IsVDSO() {
-			vdso, err := sp.extractMapping(m)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to extract VDSO: %v", err)
-			}
-			return &ReaderWithDummyClose{vdso}, "", nil
-		}
-		path := sp.getMappingFile(m)
-		f, err := os.Open(path)
-		return f, path, err
-	}
-
-	// Fall back to opening the file using the process specific root
-	path := fmt.Sprintf("/proc/%v/root/%s", sp.pid, file)
-	f, err := os.Open(path)
-	return f, path, err
 }

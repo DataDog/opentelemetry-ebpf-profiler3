@@ -87,10 +87,9 @@ type MachineData struct {
 type ReadAtCloser interface {
 	io.ReaderAt
 	io.Closer
-}
 
-type FileOpener interface {
-	Open(string) (reader ReadAtCloser, actualPath string, err error)
+	// Path returns the path of the file or an empty string if not available
+	Path() string
 }
 
 // Process is the interface to inspect ELF coredump/process.
@@ -126,6 +125,4 @@ type Process interface {
 	io.Closer
 
 	pfelf.ELFOpener
-
-	FileOpener
 }

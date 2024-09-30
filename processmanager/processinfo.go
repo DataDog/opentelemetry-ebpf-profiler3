@@ -15,6 +15,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"syscall"
 	"time"
 
@@ -32,6 +33,11 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/tpbase"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
+
+type FileWithPath struct {
+	os.File
+	Path string
+}
 
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
@@ -287,13 +293,26 @@ func (pm *ProcessManager) getELFInfo(pr process.Process, mapping *process.Mappin
 	}
 	pm.FileIDMapper.Set(hostFileID, fileID)
 
+	baseName := path.Base(mapping.Path)
+	if baseName == "/" {
+		// There are circumstances where there is no filename.
+		// E.g. kernel module 'bpfilter_umh' before Linux 5.9-rc1 uses
+		// fork_usermode_blob() and launches process with a blob without
+		// filename mapped in as the executable.
+		baseName = "<anonymous-blob>"
+	}
+
 	buildID, _ := ef.GetBuildID()
 	if buildID == "" {
 		// If the buildID is empty, try to get Go buildID.
 		buildID, _ = ef.GetGoBuildID()
 	}
 
-	pm.reporter.ExecutableMetadata(fileID, mapping.Path, buildID, libpf.Native, pr)
+	mapping2 := *mapping // copy to avoid races if callee saves the closure
+	open := func() (process.ReadAtCloser, error) {
+		return pr.OpenMappingFile(&mapping2)
+	}
+	pm.reporter.ExecutableMetadata(fileID, baseName, buildID, libpf.Native, open)
 
 	return info
 }
