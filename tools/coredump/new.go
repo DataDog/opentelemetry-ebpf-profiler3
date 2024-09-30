@@ -69,7 +69,7 @@ func (tc *trackedCoredump) CalculateMappingFileID(m *process.Mapping) (libpf.Fil
 }
 
 func (tc *trackedCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
-	rac, err := os.Open(tc.prefix + m.Path)
+	rac, err := process.Open(tc.prefix + m.Path)
 	if err == nil {
 		tc.seen[m.Path] = libpf.Void{}
 	}

@@ -69,7 +69,7 @@ func (d *dummyProcess) CalculateMappingFileID(m *process.Mapping) (libpf.FileID,
 }
 
 func (d *dummyProcess) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {
-	return os.Open(m.Path)
+	return process.Open(m.Path)
 }
 
 func (d *dummyProcess) OpenELF(name string) (*pfelf.File, error) {

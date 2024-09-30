@@ -41,7 +41,7 @@ func (scd *StoreCoredump) openFile(path string) (process.ReadAtCloser, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open file `%s`: %w", path, err)
 	}
-	return file, nil
+	return process.NewFileWithPath(file, ""), nil
 }
 
 func (scd *StoreCoredump) OpenMappingFile(m *process.Mapping) (process.ReadAtCloser, error) {

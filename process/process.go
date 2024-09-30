@@ -32,6 +32,32 @@ type systemProcess struct {
 	fileToMapping map[string]*Mapping
 }
 
+type ReadAtCloserOnly interface {
+	io.ReaderAt
+	io.Closer
+}
+
+type FileWithPath struct {
+	ReadAtCloserOnly
+	path string
+}
+
+func (f *FileWithPath) Path() string {
+	return f.path
+}
+
+func NewFileWithPath(reader ReadAtCloserOnly, path string) *FileWithPath {
+	return &FileWithPath{reader, path}
+}
+
+func Open(path string) (*FileWithPath, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return NewFileWithPath(file, path), nil
+}
+
 var _ Process = &systemProcess{}
 
 // New returns an object with Process interface accessing it
@@ -196,7 +222,7 @@ func (sp *systemProcess) OpenMappingFile(m *Mapping) (ReadAtCloser, error) {
 	if filename == "" {
 		return nil, errors.New("no backing file for anonymous memory")
 	}
-	return os.Open(filename)
+	return Open(filename)
 }
 
 func (sp *systemProcess) GetMappingFileLastModified(m *Mapping) int64 {

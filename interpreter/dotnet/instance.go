@@ -6,7 +6,6 @@ package dotnet
 import (
 	"fmt"
 	"hash/fnv"
-	"os"
 	"path"
 	"slices"
 	"strings"
@@ -629,7 +628,7 @@ func (i *dotnetInstance) SynchronizeMappings(ebpf interpreter.EbpfHandler,
 
 		if !info.reported {
 			open := func() (process.ReadAtCloser, error) {
-				return os.Open(m.Path)
+				return process.Open(m.Path)
 			}
 			symbolReporter.ExecutableMetadata(info.fileID, path.Base(m.Path),
 				info.guid, libpf.Dotnet, open)

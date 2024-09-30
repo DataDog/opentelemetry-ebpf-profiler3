@@ -34,6 +34,11 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/util"
 )
 
+type FileWithPath struct {
+	os.File
+	Path string
+}
+
 // assignTSDInfo updates the TSDInfo for the Interpreters on given PID.
 // Caller must hold pm.mu write lock.
 func (pm *ProcessManager) assignTSDInfo(pid libpf.PID, tsdInfo *tpbase.TSDInfo) {
