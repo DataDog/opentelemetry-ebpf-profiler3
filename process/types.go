@@ -89,10 +89,6 @@ type ReadAtCloser interface {
 	io.Closer
 }
 
-type FileOpener interface {
-	Open(string) (reader ReadAtCloser, actualPath string, err error)
-}
-
 // Process is the interface to inspect ELF coredump/process.
 // The current implementations do not allow concurrent access to this interface
 // from different goroutines. As an exception the ELFOpener and the returned
@@ -126,6 +122,4 @@ type Process interface {
 	io.Closer
 
 	pfelf.ELFOpener
-
-	FileOpener
 }

@@ -20,6 +20,7 @@ import (
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/nativeunwind/elfunwindinfo"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/process"
 	pm "github.com/open-telemetry/opentelemetry-ebpf-profiler/processmanager"
+	"github.com/open-telemetry/opentelemetry-ebpf-profiler/reporter"
 	"github.com/open-telemetry/opentelemetry-ebpf-profiler/support"
 	tracertypes "github.com/open-telemetry/opentelemetry-ebpf-profiler/tracer/types"
 )
@@ -61,7 +62,7 @@ func newSymbolizationCache() *symbolizationCache {
 }
 
 func (c *symbolizationCache) ExecutableMetadata(fileID libpf.FileID,
-	fileName, _ string, _ libpf.InterpreterType, _ process.FileOpener) {
+	fileName, _ string, _ libpf.InterpreterType, _ reporter.ExecutableOpener) {
 	c.files[fileID] = fileName
 }
 

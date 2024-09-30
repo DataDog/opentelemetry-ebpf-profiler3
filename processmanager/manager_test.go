@@ -80,11 +80,6 @@ func (d *dummyProcess) Close() error {
 	return nil
 }
 
-func (d *dummyProcess) Open(file string) (process.ReadAtCloser, string, error) {
-	f, err := os.Open(file)
-	return f, file, err
-}
-
 func newTestProcess(pid libpf.PID) process.Process {
 	return &dummyProcess{pid: pid}
 }
@@ -257,7 +252,7 @@ type symbolReporterMockup struct{}
 func (s *symbolReporterMockup) ReportFallbackSymbol(_ libpf.FrameID, _ string) {}
 
 func (s *symbolReporterMockup) ExecutableMetadata(_ libpf.FileID, _, _ string,
-	_ libpf.InterpreterType, _ process.FileOpener) {
+	_ libpf.InterpreterType, _ reporter.ExecutableOpener) {
 }
 
 func (s *symbolReporterMockup) FrameMetadata(_ libpf.FileID, _ libpf.AddressOrLineno,
