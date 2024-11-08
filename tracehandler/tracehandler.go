@@ -128,6 +128,8 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		APMServiceName: "", // filled in below
 		CPU:            bpfTrace.CPU,
 		Executable:     bpfTrace.Executable,
+		Origin:         bpfTrace.Origin,
+		OffTime:        bpfTrace.OffTime,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {
