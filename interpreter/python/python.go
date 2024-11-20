@@ -674,6 +674,11 @@ func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.Sym
 	if addrBase == 0 && value != 0 {
 		return value
 	}
+	gotSection := ef.Section(".got")
+	if uint64(value) >= gotSection.Addr && uint64(value) < gotSection.Addr+gotSection.Size {
+		log.Infof("Found within .got section: %x", value)
+		return value
+	}
 	// Check that the found value is within reasonable distance from the given symbol.
 	if value > addrBase && value < addrBase+4096 {
 		return value
@@ -737,6 +742,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 	if autoTLSKey == libpf.SymbolValueInvalid {
 		return nil, errors.New("unable to resolve autoTLSKey")
 	}
+
 	if version >= pythonVer(3, 7) && autoTLSKey%8 == 0 {
 		// On Python 3.7+, the call is to PyThread_tss_get, but can get optimized to
 		// call directly pthread_getspecific. So we might be finding the address
@@ -749,6 +755,7 @@ func Loader(ebpf interpreter.EbpfHandler, info *interpreter.LoaderInfo) (interpr
 		// it follows a pointer field.
 		autoTLSKey += 4
 	}
+	fmt.Println("Found autoTLSKey at", autoTLSKey)
 
 	// The Python main interpreter loop history in CPython git is:
 	//

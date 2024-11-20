@@ -45,6 +45,7 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
   // Iterate instructions
   ZydisDecodedInstruction instr;
   ZydisDecodedOperand operands[ZYDIS_MAX_OPERAND_COUNT];
+  int registers[ZYDIS_REGISTER_MAX_VALUE];
   ZyanUSize instruction_offset = 0;
   while (ZYAN_SUCCESS(ZydisDecoderDecodeFull(&decoder, code + instruction_offset,
             codesz - instruction_offset, &instr, operands))) {
@@ -53,6 +54,21 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
         instr.mnemonic == ZYDIS_MNEMONIC_JMP) {
       // Unexpected call/jmp indicating end of stub code
       return 0;
+    }
+    if ((instr.mnemonic == ZYDIS_MNEMONIC_LEA || instr.mnemonic == ZYDIS_MNEMONIC_MOV)
+        && operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER
+        && operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY)
+    {
+      // MOV register, [REG + XXXX]
+      // LEA register, [REG + XXXX]
+      // Verify that we know the base register
+      if (operands[1].mem.base == ZYDIS_REGISTER_RIP) {
+          // RIP-relative addressing
+          registers[operands[0].reg.value] = rip_base + instruction_offset + operands[1].mem.disp.value;
+      } else if (registers[operands[1].mem.base] != 0) {
+          // Register-relative addressing
+          registers[operands[0].reg.value] = registers[operands[1].mem.base] + operands[1].mem.disp.value;
+      }
     }
     if (!(instr.mnemonic == ZYDIS_MNEMONIC_LEA ||
           instr.mnemonic == ZYDIS_MNEMONIC_MOV) ||
@@ -76,6 +92,11 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
         return memory_base + operands[1].mem.disp.value;
       }
       continue;
+    }
+    // LEA/MOV target_reg, source_reg
+    if (operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
+      registers[operands[1].reg.value] != 0) {
+      return registers[operands[1].reg.value];
     }
   }
 
