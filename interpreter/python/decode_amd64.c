@@ -59,15 +59,14 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
         && operands[0].type == ZYDIS_OPERAND_TYPE_REGISTER
         && operands[1].type == ZYDIS_OPERAND_TYPE_MEMORY)
     {
-      // MOV register, [REG + XXXX]
-      // LEA register, [REG + XXXX]
+      // MOV/LEA register, [REG + XXXX]
       // Verify that we know the base register
       if (operands[1].mem.base == ZYDIS_REGISTER_RIP) {
           // RIP-relative addressing
           registers[operands[0].reg.value] = rip_base + instruction_offset + operands[1].mem.disp.value;
-      } else if (registers[operands[1].mem.base] != 0) {
+      } else if (memory_base) {
           // Register-relative addressing
-          registers[operands[0].reg.value] = registers[operands[1].mem.base] + operands[1].mem.disp.value;
+          registers[operands[0].reg.value] = memory_base + operands[1].mem.disp.value;
       }
     }
     if (!(instr.mnemonic == ZYDIS_MNEMONIC_LEA ||
@@ -93,7 +92,7 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
       }
       continue;
     }
-    // LEA/MOV target_reg, source_reg
+    // LEA/MOV target_reg, REG
     if (operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
       registers[operands[1].reg.value] != 0) {
       return registers[operands[1].reg.value];
