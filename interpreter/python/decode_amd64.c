@@ -92,7 +92,7 @@ uint64_t decode_stub_argument(const uint8_t* code, size_t codesz, uint8_t argume
       }
       continue;
     }
-    // LEA/MOV target_reg, REG
+    // MOV target_reg, REG
     if (operands[1].type == ZYDIS_OPERAND_TYPE_REGISTER &&
       registers[operands[1].reg.value] != 0) {
       return registers[operands[1].reg.value];

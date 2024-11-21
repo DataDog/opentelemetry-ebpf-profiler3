@@ -674,11 +674,6 @@ func decodeStub(ef *pfelf.File, addrBase libpf.SymbolValue, symbolName libpf.Sym
 	if addrBase == 0 && value != 0 {
 		return value
 	}
-	gotSection := ef.Section(".got")
-	if uint64(value) >= gotSection.Addr && uint64(value) < gotSection.Addr+gotSection.Size {
-		log.Infof("Found within .got section: %x", value)
-		return value
-	}
 	// Check that the found value is within reasonable distance from the given symbol.
 	if value > addrBase && value < addrBase+4096 {
 		return value
