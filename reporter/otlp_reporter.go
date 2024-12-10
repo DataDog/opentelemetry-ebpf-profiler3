@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/ebpf-profiler/libpf/xsync"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/pdata"
 	"go.opentelemetry.io/ebpf-profiler/reporter/internal/samples"
+	"go.opentelemetry.io/ebpf-profiler/support"
 )
 
 // Assert that we implement the full Reporter interface.
@@ -61,7 +62,8 @@ type OTLPReporter struct {
 	pdata *pdata.Pdata
 
 	// traceEvents stores reported trace events (trace metadata with frames and counts)
-	traceEvents xsync.RWMutex[map[samples.TraceAndMetaKey]*samples.TraceEvents]
+	// from various origins.
+	traceEvents xsync.RWMutex[map[int]samples.KeyToEventMapping]
 
 	// pkgGRPCOperationTimeout sets the time limit for GRPC requests.
 	pkgGRPCOperationTimeout time.Duration
@@ -107,6 +109,12 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		return nil, err
 	}
 
+	originsMap := make(map[int]samples.KeyToEventMapping, 2)
+	for _, origin := range []int{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
+		originsMap[origin] = make(samples.KeyToEventMapping)
+	}
+
 	return &OTLPReporter{
 		config:        cfg,
 		name:          cfg.Name,
@@ -123,10 +131,8 @@ func NewOTLP(cfg *Config) (*OTLPReporter, error) {
 		rpcStats:                NewStatsHandler(),
 		pdata:                   data,
 		hostmetadata:            hostmetadata,
-		traceEvents: xsync.NewRWMutex(
-			map[samples.TraceAndMetaKey]*samples.TraceEvents{},
-		),
-		cgroupv2ID: cgroupv2ID,
+		traceEvents:             xsync.NewRWMutex(originsMap),
+		cgroupv2ID:              cgroupv2ID,
 	}, nil
 }
 
@@ -141,8 +147,11 @@ func (r *OTLPReporter) SupportsReportTraceEvent() bool { return true }
 
 // ReportTraceEvent enqueues reported trace events for the OTLP reporter.
 func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta) {
-	traceEventsMap := r.traceEvents.WLock()
-	defer r.traceEvents.WUnlock(&traceEventsMap)
+	if meta.Origin != support.TraceOriginSampling && meta.Origin != support.TraceOriginOffCPU {
+		// At the moment only on-CPU and off-CPU traces are reported.
+		log.Errorf("Skip reporting trace for unexpected %d origin", meta.Origin)
+		return
+	}
 
 	var extraMeta any
 	if r.config.ExtraSampleAttrProd != nil {
@@ -165,13 +174,17 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		ExtraMeta:      extraMeta,
 	}
 
-	if events, exists := (*traceEventsMap)[key]; exists {
+	traceEventsMap := r.traceEvents.WLock()
+	defer r.traceEvents.WUnlock(&traceEventsMap)
+
+	if events, exists := (*traceEventsMap)[meta.Origin][key]; exists {
 		events.Timestamps = append(events.Timestamps, uint64(meta.Timestamp))
-		(*traceEventsMap)[key] = events
+		events.OffTimes = append(events.OffTimes, meta.OffTime)
+		(*traceEventsMap)[meta.Origin][key] = events
 		return
 	}
 
-	(*traceEventsMap)[key] = &samples.TraceEvents{
+	(*traceEventsMap)[meta.Origin][key] = &samples.TraceEvents{
 		Files:              trace.Files,
 		Linenos:            trace.Linenos,
 		FrameTypes:         trace.FrameTypes,
@@ -179,6 +192,7 @@ func (r *OTLPReporter) ReportTraceEvent(trace *libpf.Trace, meta *TraceEventMeta
 		MappingEnds:        trace.MappingEnd,
 		MappingFileOffsets: trace.MappingFileOffsets,
 		Timestamps:         []uint64{uint64(meta.Timestamp)},
+		OffTimes:           []uint64{meta.OffTime},
 	}
 }
 
@@ -342,7 +356,13 @@ func (r *OTLPReporter) Start(ctx context.Context) error {
 func (r *OTLPReporter) reportOTLPProfile(ctx context.Context) error {
 	traceEvents := r.traceEvents.WLock()
 	events := maps.Clone(*traceEvents)
+	originsMap := make(map[int]samples.KeyToEventMapping, 2)
 	clear(*traceEvents)
+	for _, origin := range []int{support.TraceOriginSampling,
+		support.TraceOriginOffCPU} {
+		originsMap[origin] = make(samples.KeyToEventMapping)
+	}
+	*traceEvents = originsMap
 	r.traceEvents.WUnlock(&traceEvents)
 
 	profiles := r.pdata.Generate(events)
