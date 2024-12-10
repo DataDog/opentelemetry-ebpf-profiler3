@@ -53,9 +53,6 @@ type TraceReporter interface {
 	SupportsReportTraceEvent() bool
 }
 
-// ExecutableOpener is a function that attempts to open an executable.
-type ExecutableOpener = func() (process.ReadAtCloser, error)
-
 // ExecutableMetadataArgs collects metadata about a discovered
 // executable, for reporting to a SymbolReporter via the ExecutableMetadata function.
 type ExecutableMetadataArgs struct {
@@ -73,7 +70,7 @@ type ExecutableMetadataArgs struct {
 	Interp libpf.InterpreterType
 	// Open is a function that can be used to open the executable for reading,
 	// or nil for interpreters that don't support this.
-	Open ExecutableOpener
+	Open process.FileOpener
 }
 
 // FrameMetadataArgs collects metadata about a single frame in a trace, for

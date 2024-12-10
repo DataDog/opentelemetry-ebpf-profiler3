@@ -1,0 +1,53 @@
+name: Prepare rebase on upstream
+on:
+  workflow_dispatch:
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      # Do not use `gh repo sync` with GITHUB_TOKEN, it will fail with 422:
+      # {"message":"Repository rule violations found","documentation_url":"https://docs.github.com/rest/branches/branches#sync-a-fork-branch-with-the-upstream-repository","status":"422"}
+      - name: Sync main with upstream
+        run: |
+          git switch main
+          git remote add upstream git@github.com:open-telemetry/opentelemetry-ebpf-profiler.git
+          git fetch upstream
+          git merge --ff upstream/main
+          git push origin
+
+      - name: Checkout datadog branch
+        run: |
+          git switch datadog
+          git pull
+
+      - name: Rebase datadog on main
+        run: |
+          git switch -c rebase-on-upstream
+          git rebase origin/main
+          git push origin rebase-on-upstream
+
+      - name: Create PR
+        run: |
+          gh pr create -R ${{ github.repository }} --base main --head rebase-on-upstream --title "Rebase datadog on upstream/main" --body "This PR is to rebase datadog branch on main branch"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Add comment
+        run: |
+          gh pr comment rebase-on-upstream -R ${{ github.repository }} --body "Please close and re-open this PR to trigger the tests."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -80,6 +80,11 @@ func (d *dummyProcess) Close() error {
 	return nil
 }
 
+func (d *dummyProcess) Open(file string) (process.ReadAtCloser, string, error) {
+	f, err := os.Open(file)
+	return f, file, err
+}
+
 func newTestProcess(pid libpf.PID) process.Process {
 	return &dummyProcess{pid: pid}
 }

@@ -45,6 +45,31 @@ func TestGetBuildID(t *testing.T) {
 	assert.Equal(t, "6920fd217a8416131f4377ef018a2c932f311b6d", buildID)
 }
 
+func TestGetGoBuildID(t *testing.T) {
+	elfFile := getELF("testdata/go-buildid", t)
+	defer elfFile.Close()
+
+	buildID, err := pfelf.GetGoBuildID(elfFile)
+	if err != nil {
+		t.Fatalf("GetGoBuildID failed with error: %s", err)
+	}
+
+	if buildID !=
+		"tUhrGOwxi48kXlLhYlY3/WlmPekR2qonrFvofssLt/8beXJbt0rDaHhn3I6x8D/IA6Zd8Qc8Rsh_bFKoPVn" {
+		t.Fatalf("Invalid build-id: %s", buildID)
+	}
+}
+
+func TestGetGoBuildIDError(t *testing.T) {
+	elfFile := getELF("testdata/go-buildid-bazel", t)
+	defer elfFile.Close()
+
+	buildID, err := pfelf.GetGoBuildID(elfFile)
+	if assert.ErrorIs(t, pfelf.ErrNoBuildID, err) {
+		assert.Equal(t, "", buildID)
+	}
+}
+
 func TestGetDebugLink(t *testing.T) {
 	debugExePath, err := testsupport.WriteTestExecutable1()
 	require.NoError(t, err)
