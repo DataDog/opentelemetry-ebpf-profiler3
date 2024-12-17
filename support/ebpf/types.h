@@ -337,6 +337,7 @@ typedef enum TraceOrigin {
   TRACE_UNKNOWN,
   TRACE_SAMPLING,
   TRACE_OFF_CPU,
+  TRACE_SYSCALL,
 } TraceOrigin;
 
 // OFF_CPU_THRESHOLD_MAX defines the maximum threshold.
@@ -546,6 +547,8 @@ typedef struct Trace {
 
   // origin indicates the source of the trace.
   TraceOrigin origin;
+
+  s32 syscall_id;
 
   // offtime stores the nanoseconds that the trace was off-cpu for.
   u64 offtime;
@@ -871,6 +874,10 @@ typedef struct SystemConfig {
 
   // User defined threshold for off-cpu profiling.
   u32 off_cpu_threshold;
+
+  u32 syscall_sampling_threshold;
+
+  s32 syscall_sampling_pid;
 
   // Enables the temporary hack that drops pure errors frames in unwind_stop.
   bool drop_error_only_traces;

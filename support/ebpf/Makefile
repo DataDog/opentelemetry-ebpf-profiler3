@@ -73,7 +73,7 @@ errors.h: ../../tools/errors-codegen/errors.json
 
 %.ebpf.c: errors.h ;
 
-%.ebpf.$(BUILD_TYPE).$(TARGET_ARCH).o: %.ebpf.c
+%.ebpf.$(BUILD_TYPE).$(TARGET_ARCH).o: %.ebpf.c *.h
 	$(BPF_CLANG) $(FLAGS) -o $@
 
 $(TRACER_NAME): $(OBJS)

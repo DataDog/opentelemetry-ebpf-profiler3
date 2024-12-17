@@ -130,6 +130,7 @@ func (m *traceHandler) HandleTrace(bpfTrace *host.Trace) {
 		Executable:     bpfTrace.Executable,
 		Origin:         bpfTrace.Origin,
 		OffTime:        bpfTrace.OffTime,
+		SyscallID:      bpfTrace.SyscallId,
 	}
 
 	if !m.reporter.SupportsReportTraceEvent() {

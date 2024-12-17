@@ -227,7 +227,8 @@ func determineStackLayout(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map
 
 func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 	kernelSymbols *libpf.SymbolMap, includeTracers types.IncludedTracers,
-	offCPUThreshold uint32, filterErrorFrames bool) error {
+	offCPUThreshold uint32, syscallSamplingThreshold uint32, syscallSamplingPID int32,
+	filterErrorFrames bool) error {
 	pacMask := pacmask.GetPACMask()
 	if pacMask != 0 {
 		log.Infof("Determined PAC mask to be 0x%016X", pacMask)
@@ -235,9 +236,11 @@ func loadSystemConfig(coll *cebpf.CollectionSpec, maps map[string]*cebpf.Map,
 		log.Debug("PAC is not enabled on the system.")
 	}
 	syscfg := C.SystemConfig{
-		inverse_pac_mask:       ^C.u64(pacMask),
-		drop_error_only_traces: C.bool(filterErrorFrames),
-		off_cpu_threshold:      C.u32(offCPUThreshold),
+		inverse_pac_mask:           ^C.u64(pacMask),
+		drop_error_only_traces:     C.bool(filterErrorFrames),
+		off_cpu_threshold:          C.u32(offCPUThreshold),
+		syscall_sampling_threshold: C.u32(syscallSamplingThreshold),
+		syscall_sampling_pid:       C.s32(syscallSamplingPID),
 	}
 
 	if err := parseBTF(&syscfg); err != nil {

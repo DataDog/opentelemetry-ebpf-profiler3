@@ -14,6 +14,7 @@ type TraceEventMeta struct {
 	CPU            int
 	Origin         int
 	OffTime        uint64
+	SyscallID      int
 }
 
 // TraceEvents holds known information about a trace.

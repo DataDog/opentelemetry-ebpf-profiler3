@@ -162,6 +162,9 @@ type Config struct {
 	ProbabilisticThreshold uint
 	// OffCPUThreshold is the user defined threshold for off-cpu profiling.
 	OffCPUThreshold uint32
+	// SyscallTracing
+	SyscallSamplingThreshold uint32
+	SyscallSamplingPID       int32
 }
 
 // hookPoint specifies the group and name of the hooked point in the kernel.
@@ -503,8 +506,16 @@ func initializeMapsAndPrograms(kernelSymbols *libpf.SymbolMap, cfg *Config) (
 		}
 	}
 
+	if cfg.SyscallSamplingThreshold > 0 {
+		if err = loadTracepointUnwinders(coll, ebpfProgs, ebpfMaps["tracepoint_progs"], tailCallProgs,
+			cfg.BPFVerifierLogLevel, ebpfMaps["perf_progs"].FD()); err != nil {
+			return nil, nil, fmt.Errorf("failed to load kprobe eBPF programs: %v", err)
+		}
+	}
+
 	if err = loadSystemConfig(coll, ebpfMaps, kernelSymbols, cfg.IncludeTracers,
-		cfg.OffCPUThreshold, cfg.FilterErrorFrames); err != nil {
+		cfg.OffCPUThreshold, cfg.SyscallSamplingThreshold, cfg.SyscallSamplingPID,
+		cfg.FilterErrorFrames); err != nil {
 		return nil, nil, fmt.Errorf("failed to load system config: %v", err)
 	}
 
@@ -674,6 +685,63 @@ func loadKProbeUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf
 		unwindProgName := unwindProg.name
 		if !unwindProg.noTailCallTarget {
 			unwindProgName = "kprobe_" + unwindProg.name
+		}
+
+		progSpec, ok := coll.Programs[unwindProgName]
+		if !ok {
+			return fmt.Errorf("program %s does not exist", unwindProgName)
+		}
+
+		// Replace the prog array for the tail calls.
+		insns := progArrayReferences(perfTailCallMapFD, progSpec.Instructions)
+		for _, ins := range insns {
+			if err := progSpec.Instructions[ins].AssociateMap(tailcallMap); err != nil {
+				return fmt.Errorf("failed to rewrite map ptr: %v", err)
+			}
+		}
+
+		if err := loadProgram(ebpfProgs, tailcallMap, unwindProg.progID, progSpec,
+			programOptions, unwindProg.noTailCallTarget); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// loadTracepointUnwinders reuses large parts of loadPerfUnwinders. By default all eBPF programs
+// are written as perf event eBPF programs. loadKProbeUnwinders dynamically rewrites the
+// specification of these programs to krpobe eBPF programs and adjusts tail call maps.
+func loadTracepointUnwinders(coll *cebpf.CollectionSpec, ebpfProgs map[string]*cebpf.Program,
+	tailcallMap *cebpf.Map, tailCallProgs []progLoaderHelper,
+	bpfVerifierLogLevel uint32, perfTailCallMapFD int) error {
+	programOptions := cebpf.ProgramOptions{
+		LogLevel: cebpf.LogLevel(bpfVerifierLogLevel),
+	}
+
+	progs := make([]progLoaderHelper, len(tailCallProgs)+2)
+	copy(progs, tailCallProgs)
+	progs = append(progs,
+		progLoaderHelper{
+			name:             "tracepoint_sys_enter",
+			noTailCallTarget: true,
+			enable:           true,
+		},
+		progLoaderHelper{
+			name:             "tracepoint_sys_exit",
+			noTailCallTarget: true,
+			enable:           true,
+		},
+	)
+
+	for _, unwindProg := range progs {
+		if !unwindProg.enable {
+			continue
+		}
+
+		unwindProgName := unwindProg.name
+		if !unwindProg.noTailCallTarget {
+			unwindProgName = "tracepoint_" + unwindProg.name
 		}
 
 		progSpec, ok := coll.Programs[unwindProgName]
@@ -982,6 +1050,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 		TID:              libpf.PID(ptr.tid),
 		Origin:           int(ptr.origin),
 		OffTime:          uint64(ptr.offtime),
+		SyscallId:        int(ptr.syscall_id),
 		KTime:            times.KTime(ptr.ktime),
 		CPU:              cpu,
 	}
@@ -996,6 +1065,7 @@ func (t *Tracer) loadBpfTrace(raw []byte, cpu int) *host.Trace {
 	ptr.ktime = 0
 	ptr.origin = 0
 	ptr.offtime = 0
+	ptr.syscall_id = 0
 	trace.Hash = host.TraceHash(xxh3.Hash128(raw).Lo)
 
 	userFrameOffs := 0
@@ -1310,6 +1380,31 @@ func (t *Tracer) StartOffCPUProfiling() error {
 		return nil
 	}
 	t.hooks[hookPoint{group: "sched", name: "sched_switch"}] = tpLink
+
+	return nil
+}
+
+func (t *Tracer) StartSyscallProfiling() error {
+	// Attach hooks that enables syscall profiling.
+	tpProg, ok := t.ebpfProgs["tracepoint_sys_enter"]
+	if !ok {
+		return errors.New("tracepoint_sys_enter is not available")
+	}
+	tpLink, err := link.Tracepoint("raw_syscalls", "sys_enter", tpProg, nil)
+	if err != nil {
+		return nil
+	}
+	t.hooks[hookPoint{group: "raw_syscalls", name: "sys_enter"}] = tpLink
+
+	tpProg, ok = t.ebpfProgs["tracepoint_sys_exit"]
+	if !ok {
+		return errors.New("tracepoint_sys_exit is not available")
+	}
+	tpLink, err = link.Tracepoint("raw_syscalls", "sys_exit", tpProg, nil)
+	if err != nil {
+		return nil
+	}
+	t.hooks[hookPoint{group: "raw_syscalls", name: "sys_exit"}] = tpLink
 
 	return nil
 }

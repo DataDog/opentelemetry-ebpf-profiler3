@@ -21,6 +21,11 @@
     SEC("kprobe/"#func_name) \
     int kprobe_##func_name(struct pt_regs *ctx) { \
         return func_name(ctx); \
+    } \
+    \
+    SEC("tracepoint/"#func_name) \
+    int tracepoint_##func_name(struct pt_regs *ctx) { \
+        return func_name(ctx); \
     }
 
 
@@ -648,6 +653,40 @@ static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
   return error;
 }
 
+static inline ErrorCode get_usermode_regs2(void *ctx,
+                                          UnwindState *state,
+                                          bool *has_usermode_regs) {
+  ErrorCode error;
+
+  u32 key = 0;
+  SystemConfig* syscfg = bpf_map_lookup_elem(&system_config, &key);
+  if (!syscfg) {
+    // Unreachable: array maps are always fully initialized.
+    return ERR_UNREACHABLE;
+  }
+
+  // Use the current task's entry pt_regs
+  struct task_struct *task = (struct task_struct *) bpf_get_current_task();
+  long ptregs_addr = get_task_pt_regs(task, syscfg);
+
+  struct pt_regs regs;
+  if (!ptregs_addr || bpf_probe_read_kernel(&regs, sizeof(regs), (void*) ptregs_addr)) {
+    increment_metric(metricID_UnwindNativeErrReadKernelModeRegs);
+    return ERR_NATIVE_READ_KERNELMODE_REGS;
+  }
+
+  if (!ptregs_is_usermode(&regs)) {
+    // No usermode registers context found.
+    return ERR_OK;
+  }
+  error = copy_state_regs(state, &regs, true);
+  if (error == ERR_OK) {
+    DEBUG_PRINT("Read regs: pc: %llx sp: %llx fp: %llx", state->pc, state->sp, state->fp);
+    *has_usermode_regs = true;
+  }
+  return error;
+}
+
 #else // TESTING_COREDUMP
 
 static inline ErrorCode get_usermode_regs(struct pt_regs *ctx,
@@ -684,6 +723,7 @@ int collect_trace(struct pt_regs *ctx, TraceOrigin origin, u32 pid, u32 tid,
   trace->tid = tid;
   trace->ktime = trace_timestamp;
   trace->offtime = off_cpu_time;
+  trace->syscall_id = -1;
   if (bpf_get_current_comm(&(trace->comm), sizeof(trace->comm)) < 0) {
     increment_metric(metricID_ErrBPFCurrentComm);
   }
